@@ -67,6 +67,7 @@ func Run(opt *options.Options) error {
 		cfg.DevicePluginPath = opt.DevicePluginPath
 	}
 
+	//解析输入 node label
 	cfg.NodeLabels = make(map[string]string)
 	for _, item := range strings.Split(opt.NodeLabels, ",") {
 		if len(item) > 0 {
@@ -79,6 +80,7 @@ func Run(opt *options.Options) error {
 		}
 	}
 
+	//启动server entity
 	srv := server.NewManager(cfg)
 	go srv.Run()
 
@@ -99,7 +101,10 @@ func Run(opt *options.Options) error {
 		return err
 	}
 
+	//////////////
+	//kubelet通过unix sock与device plugin交互，并且最关键的是实现ListAndWatch和Allocated接口
 	devicePluginSocket := filepath.Join(cfg.DevicePluginPath, types.KubeletSocket)
+	//创建unix sock的watcher
 	watcher, err := utils.NewFSWatcher(cfg.DevicePluginPath)
 	if err != nil {
 		log.Println("Failed to created FS watcher.")
@@ -107,10 +112,13 @@ func Run(opt *options.Options) error {
 	}
 	defer watcher.Close()
 
+	//持续去watch select chan事件
 	for {
 		select {
 		case event := <-watcher.Events:
+			//这里实现了fsnotify监听unix sock的重启，unixsock是device plugin与kubelet通信的介质
 			if event.Name == devicePluginSocket && event.Op&fsnotify.Create == fsnotify.Create {
+				//重新创建就sleep了下？？？
 				time.Sleep(time.Second)
 				klog.Fatalf("inotify: %s created, restarting.", devicePluginSocket)
 			}

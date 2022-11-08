@@ -42,6 +42,7 @@ type vcoreResourceServer struct {
 var _ pluginapi.DevicePluginServer = &vcoreResourceServer{}
 var _ ResourceServer = &vcoreResourceServer{}
 
+// 这个是向device plugin暴露新的资源？
 func newVcoreServer(manager *managerImpl) ResourceServer {
 	socketFile := filepath.Join(manager.config.DevicePluginPath, vcoreSocketName)
 

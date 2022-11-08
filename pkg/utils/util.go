@@ -43,7 +43,7 @@ import (
 	"k8s.io/klog"
 )
 
-//constants used in this package
+// constants used in this package
 const (
 	TruncateLen = 31
 	kubePrefix  = "k8s"
@@ -54,17 +54,17 @@ var (
 	DefaultDialOptions = []grpc.DialOption{grpc.WithInsecure(), grpc.WithDialer(UnixDial), grpc.WithBlock()}
 )
 
-//UnixDial dials to a unix socket using net.DialTimeout
+// UnixDial dials to a unix socket using net.DialTimeout
 func UnixDial(addr string, timeout time.Duration) (net.Conn, error) {
 	return net.DialTimeout("unix", addr, timeout)
 }
 
-//IsValidGPUPath checks if path is valid Nvidia GPU device path
+// IsValidGPUPath checks if path is valid Nvidia GPU device path
 func IsValidGPUPath(path string) bool {
 	return regexp.MustCompile(types.NvidiaFullpathRE).MatchString(path)
 }
 
-//GetGPUMinorID returns id in Nvidia GPU device path
+// GetGPUMinorID returns id in Nvidia GPU device path
 func GetGPUMinorID(path string) (int, error) {
 	str := regexp.MustCompile(types.NvidiaFullpathRE).FindStringSubmatch(path)
 
@@ -77,7 +77,7 @@ func GetGPUMinorID(path string) (int, error) {
 	return int(id), nil
 }
 
-//GetGPUData get cores, memory and device names from annotations
+// GetGPUData get cores, memory and device names from annotations
 func GetGPUData(annotations map[string]string) (gpuUtil int64, gpuMemory int64, deviceNames []string) {
 	for k, v := range annotations {
 		switch {
@@ -93,7 +93,8 @@ func GetGPUData(annotations map[string]string) (gpuUtil int64, gpuMemory int64, 
 	return gpuUtil, gpuMemory, deviceNames
 }
 
-//NewFSWatcher returns a file watcher created by fsnotify.NewWatcher
+//device plugin通过unix sock与kubelet进行交互，用的fsnotify
+// NewFSWatcher returns a file watcher created by fsnotify.NewWatcher
 func NewFSWatcher(files ...string) (*fsnotify.Watcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -197,9 +198,20 @@ func MakeContainerNamePrefix(containerName string) string {
 	return fmt.Sprintf("/%s_%s_", kubePrefix, containerName)
 }
 
+// Q:如何检查是不是GPU Pod？
+// A:应该是查看是不是有annotation或者label，qutoa之类的
 func IsGPURequiredPod(pod *v1.Pod) bool {
+	//获取pod上的注解
 	vcore := GetGPUResourceOfPod(pod, types.VCoreAnnotation)
 	vmemory := GetGPUResourceOfPod(pod, types.VMemoryAnnotation)
+
+	//这里检查整个pod申请 vcore和vmem的合法性
+
+	//失败判断：
+	//1. 如果vcore < 0
+	//2. 如果(vcore < nvtree.HundredCore && vmemory <= 0)
+	//vcore < 100 && vmemory <= 0??
+	//
 
 	// Check if pod request for GPU resource
 	if vcore <= 0 || (vcore < nvtree.HundredCore && vmemory <= 0) {
@@ -212,6 +224,7 @@ func IsGPURequiredPod(pod *v1.Pod) bool {
 	return true
 }
 
+// 检查容器是否需要GPU
 func IsGPURequiredContainer(c *v1.Container) bool {
 	klog.V(4).Infof("Determine if the container %s needs GPU resource", c.Name)
 
@@ -227,6 +240,7 @@ func IsGPURequiredContainer(c *v1.Container) bool {
 	return true
 }
 
+// 遍历POD内所有container资源，查看是否有GPU注解
 func GetGPUResourceOfPod(pod *v1.Pod, resourceName v1.ResourceName) uint {
 	var total uint
 	containers := pod.Spec.Containers
@@ -320,6 +334,7 @@ func GetPredicateTimeOfPod(pod *v1.Pod) (predicateTime uint64) {
 	return predicateTime
 }
 
+// 直接查看container是否有指定的GPU注解
 func GetGPUResourceOfContainer(container *v1.Container, resourceName v1.ResourceName) uint {
 	var count uint
 	if val, ok := container.Resources.Limits[resourceName]; ok {
